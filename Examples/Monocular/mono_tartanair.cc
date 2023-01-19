@@ -155,9 +155,6 @@ int main(int argc, char **argv)
     SLAM.SaveTrajectoryEuRoC(f_file);
     SLAM.SaveKeyFrameTrajectoryEuRoC(kf_file);
 
-    const string proto_map_file = "sip_" + string(argv[argc-1]) + ".pb";
-    SLAM.SaveProtoMap(proto_map_file);
-
     return 0;
 }
 
