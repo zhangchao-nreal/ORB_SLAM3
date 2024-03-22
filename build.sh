@@ -62,4 +62,4 @@ cmake .. -DCMAKE_BUILD_TYPE=Release \
   -DProtobuf_DIR=$cmake_prefix_path/lib/cmake/protobuf
   # -DCMAKE_PREFIX_PATH=$cmake_prefix_path \
 
-make -j2
+make -j4

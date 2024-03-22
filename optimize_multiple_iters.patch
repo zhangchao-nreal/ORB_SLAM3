@@ -1,0 +1,251 @@
+diff --git a/include/Map.h b/include/Map.h
+index 0c2f580..4139b51 100644
+--- a/include/Map.h
++++ b/include/Map.h
+@@ -30,7 +30,6 @@
+ #include <boost/serialization/base_object.hpp>
+ 
+ #include "proto/map.pb.h"
+-class ::nreal::sip::proto::Map;
+ namespace ORB_SLAM3
+ {
+ 
+@@ -156,7 +155,7 @@ public:
+     std::set<long unsigned int> msOptKFs;
+     std::set<long unsigned int> msFixedKFs;
+ 
+-    ::nreal::sip::proto::Map ToProto(Frame *current_frame_ptr);
++    ::nreal::sip::proto::Map ToProto(Frame *current_frame_ptr, std::map<long, long> &current_frame_feature_id_local_to_global);
+     ::nreal::sip::proto::Feature CreateProtoFeature(long global_feature_id, long local_feature_id, const KeyFrame *pKF, const MapPoint *pMP);
+     ::nreal::sip::proto::Feature CreateProtoFeature(long global_feature_id, long local_feature_id, const Frame *pFrame, const MapPoint *pMP);
+     ::nreal::sip::proto::Frame CreateProtoFrame(KeyFrame *keyframe_ptr);
+diff --git a/src/Map.cc b/src/Map.cc
+index 7033e45..85fdf51 100644
+--- a/src/Map.cc
++++ b/src/Map.cc
+@@ -180,7 +180,7 @@ Map::~Map()
+   return proto_frame;
+ }
+ 
+-::nreal::sip::proto::Map Map::ToProto(Frame *current_frame_ptr)
++::nreal::sip::proto::Map Map::ToProto(Frame *current_frame_ptr, std::map<long, long> &current_frame_feature_id_local_to_global)
+ {
+   std::cout << "current_frame_map_point_to_feature_id" << std::endl;
+   std::map<MapPoint*, int> current_frame_map_point_to_feature_id;
+@@ -252,6 +252,7 @@ Map::~Map()
+       {
+         int local_feature_id = it->second;
+         long global_feature_id = next_global_feature_id++;
++        current_frame_feature_id_local_to_global[local_feature_id] = global_feature_id;
+         proto_map.mutable_features()->emplace(global_feature_id, CreateProtoFeature(global_feature_id, local_feature_id, current_frame_ptr, map_point_ptr));
+         if (!proto_map.frames().contains(current_frame_ptr->mnId)) {
+             proto_map.mutable_frames()->emplace(current_frame_ptr->mnId, CreateProtoFrame(current_frame_ptr));
+diff --git a/src/Optimizer.cc b/src/Optimizer.cc
+index f464d55..e30a7c6 100644
+--- a/src/Optimizer.cc
++++ b/src/Optimizer.cc
+@@ -1291,7 +1291,8 @@ void Optimizer::LocalBundleAdjustment(KeyFrame *pKF, bool* pbStopFlag, Map* pMap
+     if(pbStopFlag)
+         if(*pbStopFlag)
+             return;
+-    nreal::sip::proto::Map proto_map = pMap->ToProto(nullptr);
++    std::map<long, long> current_frame_feature_id_local_to_global;
++    nreal::sip::proto::Map proto_map = pMap->ToProto(nullptr, current_frame_feature_id_local_to_global);
+     // pMap->PrintProtoMap(proto_map);
+     nreal::sip::PartialOptimize(proto_map, frame_ids, map_points_ids, 10);
+ 
+diff --git a/src/Tracking.cc b/src/Tracking.cc
+index 35155a5..9878101 100644
+--- a/src/Tracking.cc
++++ b/src/Tracking.cc
+@@ -2743,37 +2743,66 @@ bool Tracking::TrackReferenceKeyFrame()
+     //mCurrentFrame.PrintPointDistribution();
+ 
+     //Save current map including current frame to proto
+-    nreal::sip::proto::Map proto_map = mpAtlas->GetCurrentMap()->ToProto(&mCurrentFrame);
++    std::map<long, long> current_frame_feature_id_local_to_global;
++    nreal::sip::proto::Map proto_map = mpAtlas->GetCurrentMap()->ToProto(&mCurrentFrame, current_frame_feature_id_local_to_global);
+     // mpAtlas->GetCurrentMap()->PrintProtoMap(proto_map);
+     std::set<long> frame_ids{static_cast<long>(mCurrentFrame.mnId)}; //current frame
+     std::set<long> map_points_ids; //should be empty since no map points optimized here
+-    nreal::sip::PartialOptimize(proto_map, frame_ids, map_points_ids);
+-    nreal::sip::proto::Frame proto_frame = proto_map.frames().at(mCurrentFrame.mnId);
+-    Eigen::Quaterniond qcw(
+-    proto_frame.qcw().w(),
+-    proto_frame.qcw().x(),
+-    proto_frame.qcw().y(),
+-    proto_frame.qcw().z());
+-    Eigen::Vector3d tcw(proto_frame.tcw().x(), proto_frame.tcw().y(), proto_frame.tcw().z());
+-    std::cout << "track ref tcw: " << tcw.transpose() << std::endl;
+-    Sophus::SE3<float> sip_optimized_pose(qcw.cast<float>(), tcw.cast<float>());
+-    mCurrentFrame.SetPose(sip_optimized_pose);
+-    for (int i = 0; i < mCurrentFrame.N; ++i)
++    const std::array<float,4> chi2Mono = {5.991,5.991,5.991,5.991};
++    const std::array<int,4> its = {10,10,10,10};
++    for (size_t it = 0; it < 4; ++it)
+     {
+-      MapPoint *pMP = mCurrentFrame.mvpMapPoints[i];
+-      if (pMP)
++      nreal::sip::PartialOptimize(proto_map, frame_ids, map_points_ids, its[it]);
++      nreal::sip::proto::Frame proto_frame = proto_map.frames().at(mCurrentFrame.mnId);
++      Eigen::Quaterniond qcw(
++      proto_frame.qcw().w(),
++      proto_frame.qcw().x(),
++      proto_frame.qcw().y(),
++      proto_frame.qcw().z());
++      Eigen::Vector3d tcw(proto_frame.tcw().x(), proto_frame.tcw().y(), proto_frame.tcw().z());
++      std::cout << "track ref tcw: " << tcw.transpose() << std::endl;
++      Sophus::SE3<float> sip_optimized_pose(qcw.cast<float>(), tcw.cast<float>());
++      mCurrentFrame.SetPose(sip_optimized_pose);
++      auto proto_feature_ids = proto_map.frames().at(mCurrentFrame.mnId).feature_ids();
++
++      std::vector<long> global_feature_ids_current_frame;
++      global_feature_ids_current_frame.reserve(mCurrentFrame.N);
++      std::vector<long> map_point_ids_current_frame;
++      map_point_ids_current_frame.reserve(mCurrentFrame.N);
++
++      for (int i = 0; i < mCurrentFrame.N; ++i)
+       {
+-        const cv::KeyPoint &kpUn = mCurrentFrame.mvKeysUn[i]; Eigen::Vector2d obs(kpUn.pt.x, kpUn.pt.y);
+-        const float invSigma2 = mCurrentFrame.mvInvLevelSigma2[kpUn.octave];
+-        Eigen::Matrix2d information = (Eigen::Matrix2d::Identity()*invSigma2);
+-        Eigen::Vector3d Pc = qcw.toRotationMatrix() * pMP->GetWorldPos().cast<double>() + tcw;
+-        Eigen::Vector2d _error = mpCamera->project(Pc) - obs;
+-        double chi2 = _error.transpose() * information * _error;
+-        if (chi2 > 5.991)
++        MapPoint *pMP = mCurrentFrame.mvpMapPoints[i];
++        long global_feature_id = current_frame_feature_id_local_to_global[i];
++        if (pMP && !mCurrentFrame.mvbOutlier[i])
+         {
+-          mCurrentFrame.mvbOutlier[i] = true;
++          const cv::KeyPoint &kpUn = mCurrentFrame.mvKeysUn[i]; Eigen::Vector2d obs(kpUn.pt.x, kpUn.pt.y);
++          const float invSigma2 = mCurrentFrame.mvInvLevelSigma2[kpUn.octave];
++          Eigen::Matrix2d information = (Eigen::Matrix2d::Identity()*invSigma2);
++          Eigen::Vector3d Pc = qcw.toRotationMatrix() * pMP->GetWorldPos().cast<double>() + tcw;
++          Eigen::Vector2d _error = mpCamera->project(Pc) - obs;
++          double chi2 = _error.transpose() * information * _error;
++          if (chi2 > chi2Mono[it])
++          {
++            mCurrentFrame.mvbOutlier[i] = true;
++            //remove outlier observations from proto_map
++            proto_map.mutable_features()->erase(global_feature_id);
++            proto_map.mutable_map_points()->at(pMP->mnId).mutable_observations_ids()->erase(global_feature_id);
++          }
++          else
++          {
++            global_feature_ids_current_frame.emplace_back(global_feature_id);
++            map_point_ids_current_frame.emplace_back(pMP->mnId);
++          }
+         }
+       }
++      proto_map.mutable_frames()->at(mCurrentFrame.mnId).clear_feature_ids();
++      proto_map.mutable_frames()->at(mCurrentFrame.mnId).clear_map_points_ids();
++      for (int idx = 0; idx < global_feature_ids_current_frame.size(); ++idx)
++      {
++        proto_map.mutable_frames()->at(mCurrentFrame.mnId).add_feature_ids(global_feature_ids_current_frame[idx]);
++        proto_map.mutable_frames()->at(mCurrentFrame.mnId).add_map_points_ids(map_point_ids_current_frame[idx]);
++      }
+     }
+ 
+     // cout << " TrackReferenceKeyFrame mLastFrame.mTcw:  " << mLastFrame.mTcw << endl;
+@@ -2941,7 +2970,8 @@ bool Tracking::TrackWithMotionModel()
+             return false;
+     }
+     //Save current map including current frame to proto
+-    nreal::sip::proto::Map proto_map = mpAtlas->GetCurrentMap()->ToProto(&mCurrentFrame);
++    std::map<long, long> current_frame_feature_id_local_to_global;
++    nreal::sip::proto::Map proto_map = mpAtlas->GetCurrentMap()->ToProto(&mCurrentFrame, current_frame_feature_id_local_to_global);
+     // mpAtlas->GetCurrentMap()->PrintProtoMap(proto_map);
+     std::set<long> frame_ids{static_cast<long>(mCurrentFrame.mnId)}; //current frame
+     std::set<long> map_points_ids; //should be empty since no map points optimized here
+@@ -3039,37 +3069,66 @@ bool Tracking::TrackLocalMap()
+     if (!mpAtlas->isImuInitialized())
+     {
+       //Save current map including current frame to proto
+-      nreal::sip::proto::Map proto_map = mpAtlas->GetCurrentMap()->ToProto(&mCurrentFrame);
++      std::map<long, long> current_frame_feature_id_local_to_global;
++      nreal::sip::proto::Map proto_map = mpAtlas->GetCurrentMap()->ToProto(&mCurrentFrame, current_frame_feature_id_local_to_global);
+       // mpAtlas->GetCurrentMap()->PrintProtoMap(proto_map);
+       std::set<long> frame_ids{static_cast<long>(mCurrentFrame.mnId)}; //current frame
+       std::set<long> map_points_ids; //should be empty since no map points optimized here
+-      nreal::sip::PartialOptimize(proto_map, frame_ids, map_points_ids);
+-      nreal::sip::proto::Frame proto_frame = proto_map.frames().at(mCurrentFrame.mnId);
+-      Eigen::Quaterniond qcw(
+-      proto_frame.qcw().w(),
+-      proto_frame.qcw().x(),
+-      proto_frame.qcw().y(),
+-      proto_frame.qcw().z());
+-      Eigen::Vector3d tcw(proto_frame.tcw().x(), proto_frame.tcw().y(), proto_frame.tcw().z());
+-      std::cout << "track local tcw: " << tcw.transpose() << std::endl;
+-      Sophus::SE3<float> sip_optimized_pose(qcw.cast<float>(), tcw.cast<float>());
+-      mCurrentFrame.SetPose(sip_optimized_pose);
+-      for (int i = 0; i < mCurrentFrame.N; ++i)
++      const std::array<float,4> chi2Mono = {5.991,5.991,5.991,5.991};
++      const std::array<int,4> its = {10,10,10,10};
++      for (size_t it = 0; it < 4; ++it)
+       {
+-        MapPoint *pMP = mCurrentFrame.mvpMapPoints[i];
+-        if (pMP)
+-        {
+-          const cv::KeyPoint &kpUn = mCurrentFrame.mvKeysUn[i]; Eigen::Vector2d obs(kpUn.pt.x, kpUn.pt.y);
+-          const float invSigma2 = mCurrentFrame.mvInvLevelSigma2[kpUn.octave];
+-          Eigen::Matrix2d information = (Eigen::Matrix2d::Identity()*invSigma2);
+-          Eigen::Vector3d Pc = qcw.toRotationMatrix() * pMP->GetWorldPos().cast<double>() + tcw;
+-          Eigen::Vector2d _error = mpCamera->project(Pc) - obs;
+-          double chi2 = _error.transpose() * information * _error;
+-          if (chi2 > 5.991)
++        nreal::sip::PartialOptimize(proto_map, frame_ids, map_points_ids, its[it]);
++        nreal::sip::proto::Frame proto_frame = proto_map.frames().at(mCurrentFrame.mnId);
++        Eigen::Quaterniond qcw(
++        proto_frame.qcw().w(),
++        proto_frame.qcw().x(),
++        proto_frame.qcw().y(),
++        proto_frame.qcw().z());
++        Eigen::Vector3d tcw(proto_frame.tcw().x(), proto_frame.tcw().y(), proto_frame.tcw().z());
++        std::cout << "track ref tcw: " << tcw.transpose() << std::endl;
++        Sophus::SE3<float> sip_optimized_pose(qcw.cast<float>(), tcw.cast<float>());
++        mCurrentFrame.SetPose(sip_optimized_pose);
++        auto proto_feature_ids = proto_map.frames().at(mCurrentFrame.mnId).feature_ids();
++
++        std::vector<long> global_feature_ids_current_frame;
++        global_feature_ids_current_frame.reserve(mCurrentFrame.N);
++        std::vector<long> map_point_ids_current_frame;
++        map_point_ids_current_frame.reserve(mCurrentFrame.N);
++
++        for (int i = 0; i < mCurrentFrame.N; ++i)
++        {
++          MapPoint *pMP = mCurrentFrame.mvpMapPoints[i];
++          long global_feature_id = current_frame_feature_id_local_to_global[i];
++          if (pMP && !mCurrentFrame.mvbOutlier[i])
+           {
+-            mCurrentFrame.mvbOutlier[i] = true;
++            const cv::KeyPoint &kpUn = mCurrentFrame.mvKeysUn[i]; Eigen::Vector2d obs(kpUn.pt.x, kpUn.pt.y);
++            const float invSigma2 = mCurrentFrame.mvInvLevelSigma2[kpUn.octave];
++            Eigen::Matrix2d information = (Eigen::Matrix2d::Identity()*invSigma2);
++            Eigen::Vector3d Pc = qcw.toRotationMatrix() * pMP->GetWorldPos().cast<double>() + tcw;
++            Eigen::Vector2d _error = mpCamera->project(Pc) - obs;
++            double chi2 = _error.transpose() * information * _error;
++            if (chi2 > chi2Mono[it])
++            {
++              mCurrentFrame.mvbOutlier[i] = true;
++              //remove outlier observations from proto_map
++              proto_map.mutable_features()->erase(global_feature_id);
++              proto_map.mutable_map_points()->at(pMP->mnId).mutable_observations_ids()->erase(global_feature_id);
++            }
++            else
++            {
++              global_feature_ids_current_frame.emplace_back(global_feature_id);
++              map_point_ids_current_frame.emplace_back(pMP->mnId);
++            }
+           }
+         }
++        proto_map.mutable_frames()->at(mCurrentFrame.mnId).clear_feature_ids();
++        proto_map.mutable_frames()->at(mCurrentFrame.mnId).clear_map_points_ids();
++        for (int idx = 0; idx < global_feature_ids_current_frame.size(); ++idx)
++        {
++          proto_map.mutable_frames()->at(mCurrentFrame.mnId).add_feature_ids(global_feature_ids_current_frame[idx]);
++          proto_map.mutable_frames()->at(mCurrentFrame.mnId).add_map_points_ids(map_point_ids_current_frame[idx]);
++        }
+       }
+       // Optimizer::PoseOptimization(&mCurrentFrame);
+       // std::cout  << "TrackLocalMap tcw: "<< mCurrentFrame.GetPose().translation().transpose() << std::endl;

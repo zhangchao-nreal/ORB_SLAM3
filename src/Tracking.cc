@@ -2992,6 +2992,25 @@ bool Tracking::TrackLocalMap()
         }
     }
 
+    int outlier_test = 0;
+    int inlier_test = 0;
+
+    for (int i = 0; i < mCurrentFrame.N; ++i) {
+      if (mCurrentFrame.mvpMapPoints[i] == nullptr) {
+        continue;
+      }
+      if (mCurrentFrame.mvbOutlier[i] == false) {
+        inlier_test++;
+        continue;
+      }
+
+      outlier_test++;
+    }
+
+    std::cout << "outlier test: " << outlier_test << std::endl;
+    std::cout << "inlier test: " << inlier_test << std::endl;
+    std::cout << "inlier: " << inliers << std::endl;
+
     aux1 = 0, aux2 = 0;
     for(int i=0; i<mCurrentFrame.N; i++)
         if( mCurrentFrame.mvpMapPoints[i])
