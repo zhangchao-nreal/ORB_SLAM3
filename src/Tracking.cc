@@ -1512,6 +1512,12 @@ Sophus::SE3f Tracking::GrabImageStereo(const cv::Mat &imRectLeft, const cv::Mat 
     //cout << "Tracking start" << endl;
     Track();
     //cout << "Tracking end" << endl;
+    ofstream fp_bias("./bias.txt", ios_base::app);
+
+    fp_bias << mCurrentFrame.mImuBias.bax << "\t" << mCurrentFrame.mImuBias.bay << "\t" << mCurrentFrame.mImuBias.baz
+            << "\t" << mCurrentFrame.mImuBias.bwx << "\t" << mCurrentFrame.mImuBias.bwy << "\t" << mCurrentFrame.mImuBias.bwz << std::endl;
+    
+    fp_bias.close();
 
     return mCurrentFrame.GetPose();
 }

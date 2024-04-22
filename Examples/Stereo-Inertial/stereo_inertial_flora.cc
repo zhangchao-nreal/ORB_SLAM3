@@ -51,7 +51,7 @@ int main(int argc, char **argv)
     }
 
     const int num_seq = 1;
-    bool bFileName= true;
+    bool bFileName= false;
     string file_name;
     if (bFileName)
     {
