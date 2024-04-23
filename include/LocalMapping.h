@@ -80,6 +80,8 @@ public:
     double GetCurrKFTime();
     KeyFrame* GetCurrKF();
 
+    bool CheckNewKeyFrames();
+
     std::mutex mMutexImuInit;
 
     Eigen::MatrixXd mcovInertial;
@@ -131,7 +133,6 @@ public:
 #endif
 protected:
 
-    bool CheckNewKeyFrames();
     void ProcessNewKeyFrame();
     void CreateNewMapPoints();
 

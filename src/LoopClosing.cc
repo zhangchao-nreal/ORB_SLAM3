@@ -97,6 +97,7 @@ void LoopClosing::Run()
         //NEW LOOP AND MERGE DETECTION ALGORITHM
         //----------------------------
 
+    std::cout << "loop closing********************************************" << std::endl;
 
         if(CheckNewKeyFrames())
         {

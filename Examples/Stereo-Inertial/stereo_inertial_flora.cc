@@ -150,6 +150,7 @@ int main(int argc, char **argv)
         int num_rect = 0;
         int proccIm = 0;
         for(int ni=0; ni<nImages[seq]; ni++, proccIm++)
+        // for(int ni=0; ni<1000; ni++, proccIm++)
         {
             cout << "-----------------------------image " << ni << "------------------------" <<endl;
             // Read left and right images from file
