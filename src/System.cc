@@ -246,7 +246,6 @@ Sophus::SE3f System::TrackStereo(const cv::Mat &imLeft, const cv::Mat &imRight, 
     while (!mpLocalMapper->AcceptKeyFrames() || mpLocalMapper->CheckNewKeyFrames())
     {
         usleep(5);
-        std::cout << "wait mapper" << std::endl;
     }
 
 

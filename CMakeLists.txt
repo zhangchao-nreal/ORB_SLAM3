@@ -114,11 +114,18 @@ include/SerializationUtils.h
 include/Config.h
 include/Settings.h)
 
+target_include_directories(
+  ${PROJECT_NAME}
+  PUBLIC "$<BUILD_INTERFACE:${TARGET_INCLUDE_PATH}>"
+         "$<BUILD_INTERFACE:${PROJECT_BINARY_DIR}>"
+         "$<BUILD_INTERFACE:${PROJECT_SOURCE_DIR}>")
+
 add_subdirectory(Thirdparty/g2o)
 
 target_link_libraries(${PROJECT_NAME}
 ${OpenCV_LIBS}
 ${EIGEN3_LIBS}
+Ceres::ceres
 ${Pangolin_LIBRARIES}
 ${PROJECT_SOURCE_DIR}/Thirdparty/DBoW2/lib/libDBoW2.so
 ${PROJECT_SOURCE_DIR}/Thirdparty/g2o/lib/libg2o.so
