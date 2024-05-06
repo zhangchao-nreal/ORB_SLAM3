@@ -53,6 +53,39 @@ class LoopClosing;
 class System;
 class Settings;
 
+struct IMUData {
+  double timestamp;
+  Eigen::Vector3d gyro;
+  Eigen::Vector3d accel;
+  IMUData(const double &ts, const Eigen::Vector3d &gm, const Eigen::Vector3d &am)
+      : timestamp(ts), gyro(gm), accel(am) {}
+};
+
+class StaticInitialization {
+public:
+  StaticInitialization() = default;
+
+  bool initialization(const std::vector<IMUData> &imu_data, bool wait_for_jerk);
+
+  Eigen::Matrix3d GetPredictedRwb() { return R_; }
+
+  Eigen::Vector3d GetPredictedtwb() { return P_; }
+
+private:
+  std::list<IMUData> init_imu_data_;
+  // Amount of time we will initialize over (seconds)
+  double init_window_time = 1.0;
+  // Variance threshold on our acceleration to be classified as moving
+  double init_imu_thresh = 1.0;
+  // Gravity magnitude in the global frame (i.e. should be 9.81 typically)
+  double gravity_mag = 9.81;
+  // max imu measurements in queue
+  unsigned int max_imu_measurements_num = 3000;
+
+  Eigen::Vector3d P_;
+  Eigen::Matrix3d R_;
+};
+
 class Tracking
 {  
 
@@ -175,6 +208,8 @@ public:
     vector<MapPoint*> GetLocalMapMPS();
 
     bool mbWriteStats;
+
+    StaticInitialization initial_;
 
 #ifdef REGISTER_TIMES
     void LocalMapStats2File();
