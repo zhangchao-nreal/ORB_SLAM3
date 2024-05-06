@@ -77,18 +77,14 @@ void LocalMapping::Run()
             ProcessNewKeyFrame();
 
             // Check recent MapPoints
-            MapPointCulling();
+            // MapPointCulling();
 
             // Triangulate new MapPoints
             CreateNewMapPoints();
 
             mbAbortBA = false;
 
-            if(!CheckNewKeyFrames())
-            {
-                // Find more matches in neighbor keyframes and fuse point duplications
-                SearchInNeighbors();
-            }
+            SearchInNeighbors();
 
             bool b_doneLBA = false;
             int num_FixedKF_BA = 0;
@@ -96,44 +92,37 @@ void LocalMapping::Run()
             int num_MPs_BA = 0;
             int num_edges_BA = 0;
 
-            if(!CheckNewKeyFrames() && !stopRequested())
+            if(mpAtlas->KeyFramesInMap() > 10)
             {
-                if(mpAtlas->KeyFramesInMap()>2)
-                {
-
-                    if(mpAtlas->KeyFramesInMap() > 10)
-                    {
-                        bool bLarge = ((mpTracker->GetMatchesInliers()>75)&&mbMonocular)||((mpTracker->GetMatchesInliers()>100)&&!mbMonocular);
-                        Optimizer::LocalInertialBA(mpCurrentKeyFrame, &mbAbortBA, mpCurrentKeyFrame->GetMap(),num_FixedKF_BA,num_OptKF_BA,num_MPs_BA,num_edges_BA, bLarge, !mpCurrentKeyFrame->GetMap()->GetIniertialBA2());
-                        b_doneLBA = true;
-                    }
-                    else
-                    {
-                        Optimizer::LocalBundleAdjustment(mpCurrentKeyFrame,&mbAbortBA, mpCurrentKeyFrame->GetMap(),num_FixedKF_BA,num_OptKF_BA,num_MPs_BA,num_edges_BA);
-                        // Optimizer::FullInertialBA(mpAtlas->GetCurrentMap(), 100, false, 0, NULL, true, 1e2, 1e5);
-                        b_doneLBA = true;
-                    }
-
-                }
-
-                // Initialize IMU here
-                if(!mpCurrentKeyFrame->GetMap()->isImuInitialized() && mbInertial)
-                {
-                    if (mbMonocular)
-                        InitializeIMU(1e2, 1e10, true);
-                    else
-                        InitializeIMU(1e2, 1e5, true);
-
-                    mpCurrentKeyFrame->GetMap()->SetIniertialBA1();
-                    mpCurrentKeyFrame->GetMap()->SetIniertialBA2();
-                }
-
-                // Check redundant local Keyframes
-                KeyFrameCulling();
+                bool bLarge = ((mpTracker->GetMatchesInliers()>75)&&mbMonocular)||((mpTracker->GetMatchesInliers()>100)&&!mbMonocular);
+                Optimizer::LocalInertialBA(mpCurrentKeyFrame, &mbAbortBA, mpCurrentKeyFrame->GetMap(),num_FixedKF_BA,num_OptKF_BA,num_MPs_BA,num_edges_BA, bLarge, !mpCurrentKeyFrame->GetMap()->GetIniertialBA2());
+                b_doneLBA = true;
             }
+            else if (mpAtlas->KeyFramesInMap()>2)
+            {
+                Optimizer::LocalBundleAdjustment(mpCurrentKeyFrame,&mbAbortBA, mpCurrentKeyFrame->GetMap(),num_FixedKF_BA,num_OptKF_BA,num_MPs_BA,num_edges_BA);
+                // Optimizer::FullInertialBA(mpAtlas->GetCurrentMap(), 100, false, 0, NULL, true, 1e2, 1e5);
+                b_doneLBA = true;
+            }
+
+            // Initialize IMU here
+            if(!mpCurrentKeyFrame->GetMap()->isImuInitialized() && mbInertial)
+            {
+                if (mbMonocular)
+                    InitializeIMU(1e2, 1e10, true);
+                else
+                    InitializeIMU(1e2, 1e5, true);
+
+                mpCurrentKeyFrame->GetMap()->SetIniertialBA1();
+                mpCurrentKeyFrame->GetMap()->SetIniertialBA2();
+            }
+
+            KeyFrameCulling();
+            // Check redundant local Keyframes
 
             mpLoopCloser->InsertKeyFrame(mpCurrentKeyFrame);
         }
+
         else if(Stop() && !mbBadImu)
         {
             // Safe area to stop
