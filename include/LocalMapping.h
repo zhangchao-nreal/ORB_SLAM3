@@ -89,7 +89,6 @@ public:
     Eigen::Vector3d mbg;
     Eigen::Vector3d mba;
     double mScale;
-    double mInitTime;
     double mCostTime;
 
     unsigned int mInitSect;

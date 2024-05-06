@@ -2921,6 +2921,7 @@ void Tracking::CreateNewKeyFrame()
 
         //cout << "Active map: " << mpAtlas->GetCurrentMap()->GetId() << endl;
 
+        pKFini->bImu = true;
         mpLocalMapper->InsertKeyFrame(pKFini);
 
         mLastFrame = Frame(mCurrentFrame);
@@ -2933,9 +2934,6 @@ void Tracking::CreateNewKeyFrame()
         mpReferenceKF = pKFini;
         mCurrentFrame.mpReferenceKF = pKFini;
         
-        // pKFini->GetMap()->SetImuInitialized();
-        // pKFini->GetMap()->SetIniertialBA1();
-        // pKFini->GetMap()->SetIniertialBA2();
 
         mpAtlas->SetReferenceMapPoints(mvpLocalMapPoints);
 
@@ -2951,8 +2949,7 @@ void Tracking::CreateNewKeyFrame()
 
     KeyFrame* pKF = new KeyFrame(mCurrentFrame,mpAtlas->GetCurrentMap(),mpKeyFrameDB);
 
-    if(mpAtlas->isImuInitialized()) //  || mpLocalMapper->IsInitializing())
-        pKF->bImu = true;
+    pKF->bImu = true;
 
     pKF->SetNewBias(mCurrentFrame.mImuBias);
     mpReferenceKF = pKF;
@@ -3060,8 +3057,11 @@ void Tracking::CreateNewKeyFrame()
     }
 
 
-    mpLocalMapper->InsertKeyFrame(pKF);
+    // mpAtlas->SetImuInitialized();
+    // pKF->GetMap()->SetIniertialBA1();
+    // pKF->GetMap()->SetIniertialBA2();
 
+    mpLocalMapper->InsertKeyFrame(pKF);
     mpLocalMapper->SetNotStop(false);
 
     mnLastKeyFrameId = mCurrentFrame.mnId;

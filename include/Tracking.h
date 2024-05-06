@@ -201,7 +201,6 @@ public:
     bool mbInitWith3KFs;
     double t0; // time-stamp of first read frame
     double t0vis; // time-stamp of first inserted keyframe
-    double t0IMU; // time-stamp of IMU initialization
     bool mFastInit = false;
 
 

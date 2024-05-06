@@ -1319,7 +1319,6 @@ void System::SaveDebugData(const int &initIdx)
     // 6. Save initialization time
     f.open("init_Time_" +to_string(mpLocalMapper->mInitSect)+ ".txt", ios_base::app);
     f << fixed;
-    f << mpLocalMapper->mInitTime << endl;
     f.close();
 }
 
