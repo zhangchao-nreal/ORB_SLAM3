@@ -51,12 +51,12 @@ int main(int argc, char **argv)
     }
 
     const int num_seq = 1;
-    bool bFileName= false;
-    string file_name;
+    bool bFileName= true;
+    string dir_name;
     if (bFileName)
     {
-        file_name = string(argv[argc-1]);
-        cout << "file name: " << file_name << endl;
+        dir_name = string(argv[argc-1]);
+        cout << "dir name: " << dir_name << endl;
     }
 
     // Load all sequences:
@@ -137,7 +137,7 @@ int main(int argc, char **argv)
     cout.precision(17);
 
     // Create SLAM system. It initializes all system threads and gets ready to process frames.
-    ORB_SLAM3::System SLAM(argv[1],argv[2],ORB_SLAM3::System::IMU_STEREO, true);
+    ORB_SLAM3::System SLAM(argv[1],argv[2],ORB_SLAM3::System::IMU_STEREO, false);
 
     cv::Mat imLeft, imRight;
     for (seq = 0; seq<num_seq; seq++)
@@ -236,15 +236,13 @@ int main(int argc, char **argv)
     // Save camera trajectory
     if (bFileName)
     {
-        const string kf_file = string(argv[argc-1]);
-        const string f_file = string(argv[argc-1]);
-        SLAM.SaveTrajectoryEuRoC(f_file);
-        SLAM.SaveKeyFrameTrajectoryEuRoC(kf_file);
+        SLAM.SaveTrajectoryEuRoC(dir_name + "/CameraTrajectory.txt");
+        // SLAM.SaveKeyFrameTrajectoryEuRoC(dir_name + "/KeyFrameTrajectory.txt");
     }
     else
     {
-        SLAM.SaveTrajectoryEuRoC("CameraTrajectory.txt");
-        SLAM.SaveKeyFrameTrajectoryEuRoC("KeyFrameTrajectory.txt");
+        SLAM.SaveTrajectoryEuRoC("/CameraTrajectory.txt");
+        // SLAM.SaveKeyFrameTrajectoryEuRoC("/KeyFrameTrajectory.txt");
     }
 
     return 0;
