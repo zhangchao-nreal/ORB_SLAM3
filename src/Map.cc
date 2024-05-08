@@ -65,6 +65,7 @@ void Map::AddKeyFrame(KeyFrame *pKF)
         mnInitKFid = pKF->mnId;
         mpKFinitial = pKF;
         mpKFlowerID = pKF;
+        init_time = pKF->mTimeStamp;
     }
     mspKeyFrames.insert(pKF);
     if(pKF->mnId>mnMaxKFid)

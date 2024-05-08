@@ -2027,25 +2027,11 @@ void Tracking::Track()
         // System is initialized. Track Frame.
         bool bOK;
 
-        CheckReplacedInLastFrame();
-
-        if((!mbVelocity && !pCurrentMap->isImuInitialized()) || mCurrentFrame.mnId<mnLastRelocFrameId+2)
-        {
-            Verbose::PrintMess("TRACK: Track with respect to the reference KF ", Verbose::VERBOSITY_DEBUG);
-            bOK = TrackReferenceKeyFrame();
-        }
-        else
-        {
-            Verbose::PrintMess("TRACK: Track with motion model", Verbose::VERBOSITY_DEBUG);
-            bOK = TrackWithMotionModel();
-            if(!bOK)
-                bOK = TrackReferenceKeyFrame();
-        }
-
         if(!mCurrentFrame.mpReferenceKF)
             mCurrentFrame.mpReferenceKF = mpReferenceKF;
-
         // If we have an initial estimation of the camera pose and matching. Track the local map.
+        
+        PredictStateIMU();
         bOK = TrackLocalMap();
 
         if (!bOK) {
@@ -3268,27 +3254,11 @@ void Tracking::SearchLocalPoints()
     if(nToMatch>0)
     {
         ORBmatcher matcher(0.8);
-        int th = 1;
-        if(mSensor==System::RGBD || mSensor==System::IMU_RGBD)
-            th=3;
-        if(mpAtlas->isImuInitialized())
-        {
-            if(mpAtlas->GetCurrentMap()->GetIniertialBA2())
-                th=2;
-            else
-                th=6;
-        }
-        else if(!mpAtlas->isImuInitialized() && (mSensor==System::IMU_MONOCULAR || mSensor==System::IMU_STEREO || mSensor == System::IMU_RGBD))
-        {
-            th=10;
-        }
+        int th = 6;
 
-        // If the camera has been relocalised recently, perform a coarser search
-        if(mCurrentFrame.mnId<mnLastRelocFrameId+2)
-            th=5;
-
-        if(mState==LOST || mState==RECENTLY_LOST) // Lost for less than 1 second
-            th=15; // 15
+        if (mCurrentFrame.mTimeStamp - mpAtlas->GetCurrentMap()->init_time >15) {
+            th=2;
+        }
 
         int matches = matcher.SearchByProjection(mCurrentFrame, mvpLocalMapPoints, th, mpLocalMapper->mbFarPoints, mpLocalMapper->mThFarPoints);
     }
@@ -3338,51 +3308,28 @@ void Tracking::UpdateLocalKeyFrames()
 {
     // Each map point vote for the keyframes in which it has been observed
     map<KeyFrame*,int> keyframeCounter;
-    if(!mpAtlas->isImuInitialized() || (mCurrentFrame.mnId<mnLastRelocFrameId+2))
-    {
-        for(int i=0; i<mCurrentFrame.N; i++)
-        {
-            MapPoint* pMP = mCurrentFrame.mvpMapPoints[i];
-            if(pMP)
-            {
-                if(!pMP->isBad())
-                {
-                    const map<KeyFrame*,tuple<int,int>> observations = pMP->GetObservations();
-                    for(map<KeyFrame*,tuple<int,int>>::const_iterator it=observations.begin(), itend=observations.end(); it!=itend; it++)
-                        keyframeCounter[it->first]++;
-                }
-                else
-                {
-                    mCurrentFrame.mvpMapPoints[i]=NULL;
-                }
-            }
-        }
-    }
-    else
-    {
-        for(int i=0; i<mLastFrame.N; i++)
-        {
-            // Using lastframe since current frame has not matches yet
-            if(mLastFrame.mvpMapPoints[i])
-            {
-                MapPoint* pMP = mLastFrame.mvpMapPoints[i];
-                if(!pMP)
-                    continue;
-                if(!pMP->isBad())
-                {
-                    const map<KeyFrame*,tuple<int,int>> observations = pMP->GetObservations();
-                    for(map<KeyFrame*,tuple<int,int>>::const_iterator it=observations.begin(), itend=observations.end(); it!=itend; it++)
-                        keyframeCounter[it->first]++;
-                }
-                else
-                {
-                    // MODIFICATION
-                    mLastFrame.mvpMapPoints[i]=NULL;
-                }
-            }
-        }
-    }
 
+    for(int i=0; i<mLastFrame.N; i++)
+    {
+        // Using lastframe since current frame has not matches yet
+        if(mLastFrame.mvpMapPoints[i])
+        {
+            MapPoint* pMP = mLastFrame.mvpMapPoints[i];
+            if(!pMP)
+                continue;
+            if(!pMP->isBad())
+            {
+                const map<KeyFrame*,tuple<int,int>> observations = pMP->GetObservations();
+                for(map<KeyFrame*,tuple<int,int>>::const_iterator it=observations.begin(), itend=observations.end(); it!=itend; it++)
+                    keyframeCounter[it->first]++;
+            }
+            else
+            {
+                // MODIFICATION
+                mLastFrame.mvpMapPoints[i]=NULL;
+            }
+        }
+    }
 
     int max=0;
     KeyFrame* pKFmax= static_cast<KeyFrame*>(NULL);

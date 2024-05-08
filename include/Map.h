@@ -154,6 +154,7 @@ public:
     // DEBUG: show KFs which are used in LBA
     std::set<long unsigned int> msOptKFs;
     std::set<long unsigned int> msFixedKFs;
+    double init_time;
 
 protected:
 
