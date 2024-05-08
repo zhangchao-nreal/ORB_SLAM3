@@ -27,6 +27,7 @@ Examples/Stereo/stereo_kitti
 Examples/Stereo/stereo_tum_vi
 Examples/Stereo/stereo_realsense_t265
 Examples/Stereo/stereo_realsense_D435i
+Examples/Stereo-Inertial/results/
 
 Examples/Monocular-Inertial/mono_inertial_euroc
 Examples/Monocular-Inertial/mono_inertial_tum_vi
