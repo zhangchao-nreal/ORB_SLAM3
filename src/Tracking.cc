@@ -2133,8 +2133,6 @@ void Tracking::StereoInitialization()
         // Eigen::Vector3f Vwb0;
         // Vwb0.setZero();
         // mCurrentFrame.SetImuPoseVelocity(Rwb0, twb0, Vwb0);
-        std::cout << "cTcb: " << mCurrentFrame.mImuCalib.mTcb.rotationMatrix() << std::endl;
-        std::cout << "Rwb: " << initial_.GetPredictedRwb() << std::endl;
 
         Eigen::Matrix3f Rwb0 = initial_.GetPredictedRwb().cast<float>();
         Eigen::Vector3f twb0 = Eigen::Vector3f::Zero(); 
