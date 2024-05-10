@@ -94,6 +94,12 @@ void LocalMapping::Run()
 
             if(mpAtlas->KeyFramesInMap() > 10)
             {
+                float dist = (mpCurrentKeyFrame->mPrevKF->GetCameraCenter() - mpCurrentKeyFrame->GetCameraCenter()).norm() +
+                        (mpCurrentKeyFrame->mPrevKF->mPrevKF->GetCameraCenter() - mpCurrentKeyFrame->mPrevKF->GetCameraCenter()).norm();
+
+                if(dist>0.05)
+                    mTinit += mpCurrentKeyFrame->mTimeStamp - mpCurrentKeyFrame->mPrevKF->mTimeStamp;
+
                 bool bLarge = ((mpTracker->GetMatchesInliers()>75)&&mbMonocular)||((mpTracker->GetMatchesInliers()>100)&&!mbMonocular);
                 Optimizer::LocalInertialBA(mpCurrentKeyFrame, &mbAbortBA, mpCurrentKeyFrame->GetMap(),num_FixedKF_BA,num_OptKF_BA,num_MPs_BA,num_edges_BA, bLarge, !mpCurrentKeyFrame->GetMap()->GetIniertialBA2());
                 b_doneLBA = true;
@@ -119,13 +125,57 @@ void LocalMapping::Run()
                 else
                     InitializeIMU(1e2, 1e5, true);
 
-                mpCurrentKeyFrame->GetMap()->SetIniertialBA1();
-                mpCurrentKeyFrame->GetMap()->SetIniertialBA2();
+                // mpCurrentKeyFrame->GetMap()->SetIniertialBA1();
+                // mpCurrentKeyFrame->GetMap()->SetIniertialBA2();
             }
 
             KeyFrameCulling();
             // Check redundant local Keyframes
 
+            if ((mTinit<50.0f) && mbInertial)
+            {
+                if(mpCurrentKeyFrame->GetMap()->isImuInitialized() && mpTracker->mState==Tracking::OK) // Enter here everytime local-mapping is called
+                {
+                    if(!mpCurrentKeyFrame->GetMap()->GetIniertialBA1()){
+                        if (mTinit>5.0f)
+                        {
+                            cout << "start VIBA 1" << endl;
+                            mpCurrentKeyFrame->GetMap()->SetIniertialBA1();
+                            if (mbMonocular)
+                                InitializeIMU(1.f, 1e5, true);
+                            else
+                                InitializeIMU(1.f, 1e5, true);
+
+                            cout << "end VIBA 1" << endl;
+                        }
+                    }
+                    else if(!mpCurrentKeyFrame->GetMap()->GetIniertialBA2()){
+                        if (mTinit>15.0f){
+                            cout << "start VIBA 2" << endl;
+                            mpCurrentKeyFrame->GetMap()->SetIniertialBA2();
+                            if (mbMonocular)
+                                InitializeIMU(0.f, 0.f, true);
+                            else
+                                InitializeIMU(0.f, 0.f, true);
+
+                            cout << "end VIBA 2" << endl;
+                        }
+                    }
+
+                    // scale refinement
+                    // if (((mpAtlas->KeyFramesInMap())<=200) &&
+                    //         ((mTinit>25.0f && mTinit<25.5f)||
+                    //         (mTinit>35.0f && mTinit<35.5f)||
+                    //         (mTinit>45.0f && mTinit<45.5f)||
+                    //         (mTinit>55.0f && mTinit<55.5f)||
+                    //         (mTinit>65.0f && mTinit<65.5f)||
+                    //         (mTinit>75.0f && mTinit<75.5f))){
+                    //     if (mbMonocular)
+                    //         ScaleRefinement();
+                    // }
+                }
+            }
+                
             mpLoopCloser->InsertKeyFrame(mpCurrentKeyFrame);
         }
 
