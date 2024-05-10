@@ -142,9 +142,9 @@ void LocalMapping::Run()
                             cout << "start VIBA 1" << endl;
                             mpCurrentKeyFrame->GetMap()->SetIniertialBA1();
                             if (mbMonocular)
-                                InitializeIMU(1.f, 1e5, true);
+                                InitializeIMU(1.f, 1e5, true, false);
                             else
-                                InitializeIMU(1.f, 1e5, true);
+                                InitializeIMU(1.f, 1e5, true, false);
 
                             cout << "end VIBA 1" << endl;
                         }
@@ -154,9 +154,9 @@ void LocalMapping::Run()
                             cout << "start VIBA 2" << endl;
                             mpCurrentKeyFrame->GetMap()->SetIniertialBA2();
                             if (mbMonocular)
-                                InitializeIMU(0.f, 0.f, true);
+                                InitializeIMU(0.f, 0.f, true, false);
                             else
-                                InitializeIMU(0.f, 0.f, true);
+                                InitializeIMU(0.f, 0.f, true, false);
 
                             cout << "end VIBA 2" << endl;
                         }
@@ -1110,7 +1110,7 @@ bool LocalMapping::isFinished()
 //     return;
 // }
 
-void LocalMapping::InitializeIMU(float priorG, float priorA, bool bFIBA)
+void LocalMapping::InitializeIMU(float priorG, float priorA, bool bFIBA , bool gravity_allin)
 {
     if (mbResetRequested)
         return;
@@ -1203,10 +1203,12 @@ void LocalMapping::InitializeIMU(float priorG, float priorA, bool bFIBA)
 
     // mInitTime = mpTracker->mLastFrame.mTimeStamp-vpKF.front()->mTimeStamp;
 
-    std::chrono::steady_clock::time_point t0 = std::chrono::steady_clock::now();
-    Optimizer::InertialOptimization(mpAtlas->GetCurrentMap(), mRwg, mScale, mbg, mba, mbMonocular, infoInertial, false, false, priorG, priorA);
+    if (gravity_allin) {
+        std::chrono::steady_clock::time_point t0 = std::chrono::steady_clock::now();
+        Optimizer::InertialOptimization(mpAtlas->GetCurrentMap(), mRwg, mScale, mbg, mba, mbMonocular, infoInertial, false, false, priorG, priorA);
 
-    std::chrono::steady_clock::time_point t1 = std::chrono::steady_clock::now();
+        std::chrono::steady_clock::time_point t1 = std::chrono::steady_clock::now();
+    }
 
     if (mScale<1e-1)
     {
