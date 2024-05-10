@@ -1112,226 +1112,26 @@ bool LocalMapping::isFinished()
 
 void LocalMapping::InitializeIMU(float priorG, float priorA, bool bFIBA , bool gravity_allin)
 {
-    if (mbResetRequested)
-        return;
-
-    float minTime;
-    int nMinKF;
-    if (mbMonocular)
-    {
-        minTime = 2.0;
-        nMinKF = 10;
-    }
-    else
-    {
-        minTime = 1.0;
-        nMinKF = 10;
-    }
-
+    int nMinKF = 10;
 
     if(mpAtlas->KeyFramesInMap()<nMinKF)
         return;
 
-    // Retrieve all keyframe in temporal order
-    list<KeyFrame*> lpKF;
-    KeyFrame* pKF = mpCurrentKeyFrame;
-    while(pKF->mPrevKF)
-    {
-        lpKF.push_front(pKF);
-        pKF = pKF->mPrevKF;
-    }
-    lpKF.push_front(pKF);
-    vector<KeyFrame*> vpKF(lpKF.begin(),lpKF.end());
-
-    if(vpKF.size()<nMinKF)
-        return;
-
-    mFirstTs=vpKF.front()->mTimeStamp;
-    if(mpCurrentKeyFrame->mTimeStamp-mFirstTs<minTime)
-        return;
-
-    bInitializing = true;
-
-    while(CheckNewKeyFrames())
-    {
-        ProcessNewKeyFrame();
-        vpKF.push_back(mpCurrentKeyFrame);
-        lpKF.push_back(mpCurrentKeyFrame);
-    }
-
-    const int N = vpKF.size();
-    IMU::Bias b(0,0,0,0,0,0);
-
-    // Compute and KF velocities mRwg estimation
-
-    mRwg = Eigen::Matrix3d::Identity();
-    mbg = mpCurrentKeyFrame->GetGyroBias().cast<double>();
-    mba = mpCurrentKeyFrame->GetAccBias().cast<double>();
-    mScale=1.0;
-
-    // mInitTime = mpTracker->mLastFrame.mTimeStamp-vpKF.front()->mTimeStamp;
-
-    if (gravity_allin) {
-        std::chrono::steady_clock::time_point t0 = std::chrono::steady_clock::now();
-        Optimizer::InertialOptimization(mpAtlas->GetCurrentMap(), mRwg, mScale, mbg, mba, mbMonocular, infoInertial, false, false, priorG, priorA);
-
-        std::chrono::steady_clock::time_point t1 = std::chrono::steady_clock::now();
-    }
-
-    if (mScale<1e-1)
-    {
-        cout << "scale too small" << endl;
-        bInitializing=false;
-        return;
-    }
-
-    // Before this line we are not changing the map
-    {
-        unique_lock<mutex> lock(mpAtlas->GetCurrentMap()->mMutexMapUpdate);
-        if ((fabs(mScale - 1.f) > 0.00001) || !mbMonocular) {
-            Sophus::SE3f Twg(mRwg.cast<float>().transpose(), Eigen::Vector3f::Zero());
-            mpAtlas->GetCurrentMap()->ApplyScaledRotation(Twg, mScale, true);
-            mpTracker->UpdateFrameIMU(mScale, vpKF[0]->GetImuBias(), mpCurrentKeyFrame);
-        }
-
-        // Check if initialization OK
-        if (!mpAtlas->isImuInitialized())
-            for (int i = 0; i < N; i++) {
-                KeyFrame *pKF2 = vpKF[i];
-                pKF2->bImu = true;
-            }
-    }
-
-    mpTracker->UpdateFrameIMU(1.0,vpKF[0]->GetImuBias(),mpCurrentKeyFrame);
     if (!mpAtlas->isImuInitialized())
     {
         mpAtlas->SetImuInitialized();
-        // mpTracker->t0IMU = mpTracker->mCurrentFrame.mTimeStamp;
-        mpCurrentKeyFrame->bImu = true;
     }
 
     std::chrono::steady_clock::time_point t4 = std::chrono::steady_clock::now();
     if (bFIBA)
     {
         if (priorA!=0.f)
-            Optimizer::FullInertialBA(mpAtlas->GetCurrentMap(), 100, false, mpCurrentKeyFrame->mnId, NULL, true, priorG, priorA);
+            Optimizer::FullInertialBA(mpAtlas->GetCurrentMap(), 100, false, 0, NULL, true, priorG, priorA);
         else
-            Optimizer::FullInertialBA(mpAtlas->GetCurrentMap(), 100, false, mpCurrentKeyFrame->mnId, NULL, false);
+            Optimizer::FullInertialBA(mpAtlas->GetCurrentMap(), 100, false, 0, NULL, false);
     }
 
     std::chrono::steady_clock::time_point t5 = std::chrono::steady_clock::now();
-
-    Verbose::PrintMess("Global Bundle Adjustment finished\nUpdating map ...", Verbose::VERBOSITY_NORMAL);
-
-    // Get Map Mutex
-    unique_lock<mutex> lock(mpAtlas->GetCurrentMap()->mMutexMapUpdate);
-
-    unsigned long GBAid = mpCurrentKeyFrame->mnId;
-
-    // Process keyframes in the queue
-    while(CheckNewKeyFrames())
-    {
-        ProcessNewKeyFrame();
-        vpKF.push_back(mpCurrentKeyFrame);
-        lpKF.push_back(mpCurrentKeyFrame);
-    }
-
-    // Correct keyframes starting at map first keyframe
-    list<KeyFrame*> lpKFtoCheck(mpAtlas->GetCurrentMap()->mvpKeyFrameOrigins.begin(),mpAtlas->GetCurrentMap()->mvpKeyFrameOrigins.end());
-
-    while(!lpKFtoCheck.empty())
-    {
-        KeyFrame* pKF = lpKFtoCheck.front();
-        const set<KeyFrame*> sChilds = pKF->GetChilds();
-        Sophus::SE3f Twc = pKF->GetPoseInverse();
-        for(set<KeyFrame*>::const_iterator sit=sChilds.begin();sit!=sChilds.end();sit++)
-        {
-            KeyFrame* pChild = *sit;
-            if(!pChild || pChild->isBad())
-                continue;
-
-            if(pChild->mnBAGlobalForKF!=GBAid)
-            {
-                Sophus::SE3f Tchildc = pChild->GetPose() * Twc;
-                pChild->mTcwGBA = Tchildc * pKF->mTcwGBA;
-
-                Sophus::SO3f Rcor = pChild->mTcwGBA.so3().inverse() * pChild->GetPose().so3();
-                if(pChild->isVelocitySet()){
-                    pChild->mVwbGBA = Rcor * pChild->GetVelocity();
-                }
-                else {
-                    Verbose::PrintMess("Child velocity empty!! ", Verbose::VERBOSITY_NORMAL);
-                }
-
-                pChild->mBiasGBA = pChild->GetImuBias();
-                pChild->mnBAGlobalForKF = GBAid;
-
-            }
-            lpKFtoCheck.push_back(pChild);
-        }
-
-        pKF->mTcwBefGBA = pKF->GetPose();
-        pKF->SetPose(pKF->mTcwGBA);
-
-        if(pKF->bImu)
-        {
-            pKF->mVwbBefGBA = pKF->GetVelocity();
-            pKF->SetVelocity(pKF->mVwbGBA);
-            pKF->SetNewBias(pKF->mBiasGBA);
-        } else {
-            cout << "KF " << pKF->mnId << " not set to inertial!! \n";
-        }
-
-        lpKFtoCheck.pop_front();
-    }
-
-    // Correct MapPoints
-    const vector<MapPoint*> vpMPs = mpAtlas->GetCurrentMap()->GetAllMapPoints();
-
-    for(size_t i=0; i<vpMPs.size(); i++)
-    {
-        MapPoint* pMP = vpMPs[i];
-
-        if(pMP->isBad())
-            continue;
-
-        if(pMP->mnBAGlobalForKF==GBAid)
-        {
-            // If optimized by Global BA, just update
-            pMP->SetWorldPos(pMP->mPosGBA);
-        }
-        else
-        {
-            // Update according to the correction of its reference keyframe
-            KeyFrame* pRefKF = pMP->GetReferenceKeyFrame();
-
-            if(pRefKF->mnBAGlobalForKF!=GBAid)
-                continue;
-
-            // Map to non-corrected camera
-            Eigen::Vector3f Xc = pRefKF->mTcwBefGBA * pMP->GetWorldPos();
-
-            // Backproject using corrected camera
-            pMP->SetWorldPos(pRefKF->GetPoseInverse() * Xc);
-        }
-    }
-
-    Verbose::PrintMess("Map updated!", Verbose::VERBOSITY_NORMAL);
-
-    mnKFs=vpKF.size();
-    mIdxInit++;
-
-    for(list<KeyFrame*>::iterator lit = mlNewKeyFrames.begin(), lend=mlNewKeyFrames.end(); lit!=lend; lit++)
-    {
-        (*lit)->SetBadFlag();
-        delete *lit;
-    }
-    mlNewKeyFrames.clear();
-
-    mpTracker->mState=Tracking::OK;
-    bInitializing = false;
-
-    mpCurrentKeyFrame->GetMap()->IncreaseChangeIndex();
 
     return;
 }
