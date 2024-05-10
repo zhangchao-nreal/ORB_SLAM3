@@ -121,9 +121,9 @@ void LocalMapping::Run()
             if(!mpCurrentKeyFrame->GetMap()->isImuInitialized() && mbInertial)
             {
                 if (mbMonocular)
-                    InitializeIMU(1e2, 1e10, true);
+                    InitializeIMU(1e2, 1e10, true, false);
                 else
-                    InitializeIMU(1e2, 1e5, true);
+                    InitializeIMU(1e2, 1e5, true, false);
 
                 // mpCurrentKeyFrame->GetMap()->SetIniertialBA1();
                 // mpCurrentKeyFrame->GetMap()->SetIniertialBA2();
@@ -1163,42 +1163,10 @@ void LocalMapping::InitializeIMU(float priorG, float priorA, bool bFIBA , bool g
     IMU::Bias b(0,0,0,0,0,0);
 
     // Compute and KF velocities mRwg estimation
-    if (!mpCurrentKeyFrame->GetMap()->isImuInitialized())
-    {
-        Eigen::Matrix3f Rwg;
-        Eigen::Vector3f dirG;
-        dirG.setZero();
-        for(vector<KeyFrame*>::iterator itKF = vpKF.begin(); itKF!=vpKF.end(); itKF++)
-        {
-            if (!(*itKF)->mpImuPreintegrated)
-                continue;
-            if (!(*itKF)->mPrevKF)
-                continue;
 
-            dirG -= (*itKF)->mPrevKF->GetImuRotation() * (*itKF)->mpImuPreintegrated->GetUpdatedDeltaVelocity();
-            Eigen::Vector3f _vel = ((*itKF)->GetImuPosition() - (*itKF)->mPrevKF->GetImuPosition())/(*itKF)->mpImuPreintegrated->dT;
-            (*itKF)->SetVelocity(_vel);
-            (*itKF)->mPrevKF->SetVelocity(_vel);
-        }
-
-        dirG = dirG/dirG.norm();
-        Eigen::Vector3f gI(0.0f, 0.0f, -1.0f);
-        Eigen::Vector3f v = gI.cross(dirG);
-        const float nv = v.norm();
-        const float cosg = gI.dot(dirG);
-        const float ang = acos(cosg);
-        Eigen::Vector3f vzg = v*ang/nv;
-        Rwg = Sophus::SO3f::exp(vzg).matrix();
-        mRwg = Rwg.cast<double>();
-        mTinit = mpCurrentKeyFrame->mTimeStamp-mFirstTs;
-    }
-    else
-    {
-        mRwg = Eigen::Matrix3d::Identity();
-        mbg = mpCurrentKeyFrame->GetGyroBias().cast<double>();
-        mba = mpCurrentKeyFrame->GetAccBias().cast<double>();
-    }
-
+    mRwg = Eigen::Matrix3d::Identity();
+    mbg = mpCurrentKeyFrame->GetGyroBias().cast<double>();
+    mba = mpCurrentKeyFrame->GetAccBias().cast<double>();
     mScale=1.0;
 
     // mInitTime = mpTracker->mLastFrame.mTimeStamp-vpKF.front()->mTimeStamp;
